@@ -8,7 +8,7 @@ import time
 from reverence import blue
 from bottle import route, request, run
 
-EVEROOT = 'C:\Program Files (x86)\EVE Online'
+EVEROOT = 'C:\Program Files (x86)\CCP\EVE'
 
 eve = blue.EVE(EVEROOT)
 cfg = eve.getconfigmgr()
@@ -36,14 +36,14 @@ head = '''<!doctype html>
 <head>
 <title>EVE Cache Trade Finder</title>
 <style>
-body { background: #111; color: #ddd; font: 12px/18px Arial, sans-serif }
-a { color: #fa6 }
-input, select { width: 70px; padding: 0 2px; background: #333; color: #fff; border: 1px solid #ddd; -webkit-box-sizing: border-box }
-.right, input[type="text"] { text-align: right; }
-select { padding: 0 0 0 37px }
-label, span.right { float: left; min-width: 120px; }
-label, span.total { font-weight: bold }
-form label { position: relative; top: 3px }
+    body { background: #111; color: #ddd; font: 12px/18px Arial, sans-serif }
+    a { color: #fa6 }
+    input, select { width: 70px; padding: 0 2px; background: #333; color: #fff; border: 1px solid #ddd; -webkit-box-sizing: border-box }
+    .right, input[type="text"] { text-align: right; }
+    select { padding: 0 0 0 37px }
+    label, span.right { float: left; min-width: 120px; }
+    label, span.total { font-weight: bold }
+    form label { position: relative; top: 3px }
 </style>
 </head>
 '''
