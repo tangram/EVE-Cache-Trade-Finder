@@ -1,7 +1,7 @@
-EVE Cache Trade Finder v0.2
+EVE Cache Trade Finder v0.3
 ===========================
 
-Copyright (C)2012 by Eirik Krogstad
+Copyright (C) 2012 by Eirik Krogstad
 
 Licenced under the MIT License, see http://www.opensource.org/licenses/MIT
 
@@ -21,6 +21,7 @@ Usage:
 
 Changelog:
 ----------
+- 0.3 - Cleaned up HTML, added tax, sped up indexing.
 - 0.2 - First version to use Bottle and the in-game browser. Limited feature set, no sorting of trades.
 - 0.1 - Initial version writes trades to standard output
 
