@@ -1,4 +1,4 @@
-# EVE Cache Trade Finder v0.3
+# EVE Cache Trade Finder v0.4
 # Copyright (C) 2012 by Eirik Krogstad
 # Requires the Python libraries Bottle and Reverence
 # Bottle: https://github.com/defnull/bottle
@@ -16,14 +16,13 @@ cachemgr = eve.getcachemgr()
 cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
 
 profitlimit = 1000000 # ISK
-timelimit = 24        # hours
-cargolimit = 10000    # m3
-bytrip = True         # get results by profit per trip
-byprofit = False      # get results by total profit
+timelimit = 4         # hours
+cargolimit = 1000     # m3
 accounting = 0        # accounting skill level
-cutoff = 0.1          # factor of highest/lowest price where the indexing gets cut off (0.1 = 10 %)
-                      # lower cutoff gives greater speed, but you may miss some trades
-                      # higher cutoff may take a long time with a large cache
+sortby = 0            # selected sort option, see list below
+sortstrings = ['Trip profit', 'Total profit']
+
+resultlimit = 1000    # limit for total number of results
 
 def realtime(s):
     return (time.time() - ((s - 116444736000000000) / 10000000)) / 3600
@@ -38,10 +37,10 @@ head = '''<!doctype html>
 <style>
     body { background: #111; color: #ddd; font: 12px/18px Arial, sans-serif }
     a { color: #fa6 }
-    input, select { width: 70px; padding: 0 2px; background: #333; color: #fff; border: 1px solid #ddd; -webkit-box-sizing: border-box }
-    .right, input[type="text"] { text-align: right; }
-    select { padding: 0 0 0 37px }
-    label, span.right { float: left; min-width: 120px; }
+    input, select { width: 85px; padding: 0 2px; background: #333; color: #fff; border: 1px solid #ddd; -webkit-box-sizing: border-box }
+    .right, input[type="text"] { text-align: right }
+    select { padding: 0 }
+    label, span.right { float: left; min-width: 120px }
     label, span.total { font-weight: bold }
     form label { position: relative; top: 3px }
 </style>
@@ -51,30 +50,32 @@ head = '''<!doctype html>
 @route('/')
 @route('/index.html')
 def index():
-    global profitlimit, timelimit, cargolimit, accounting
+    global profitlimit, timelimit, cargolimit, accounting, sortby
 
     profitlimit = int(request.query.profitlimit or profitlimit)
     timelimit = int(request.query.timelimit or timelimit)
     cargolimit = int(request.query.cargolimit or cargolimit)
     accounting = int(request.query.accounting or accounting)
+    sortby = int(request.query.sortby or sortby)
+    taxlevel = (1 - (accounting * 0.1)) * 0.01
 
-    sell = list()
-    buy = list()
+    sell = {}
+    buy = {}
     for key, obj in cmc.iteritems():
         if key[1] == 'GetOrders' and realtime(obj['runid']) < timelimit:
             item = cfg.invtypes.Get(key[3])
             region = cfg.evelocations.Get(key[2])
-            lowest = 1000000000000
-            highest = 0
             # 0 = sell orders, 1 = buy orders
             for row in obj['lret'][0]:
-                lowest = min(row.price, lowest)
-                if row.price < lowest * (1 + cutoff):
-                    sell.append([row.typeID, [row.price, row.volRemaining, row.stationID, key[2]]])
+                if row.typeID in sell:
+                    sell[row.typeID].append(row)
+                else:
+                    sell[row.typeID] = [row]
             for row in obj['lret'][1]:
-                highest = max(row.price, highest)
-                if row.price > highest * (1 - cutoff):
-                    buy.append([row.typeID, [row.price, row.volRemaining, row.stationID, key[2]]])
+                if row.typeID in buy:
+                    buy[row.typeID].append(row)
+                else:
+                    buy[row.typeID] = [row]
 
     output = head
     output += '<body>\n'
@@ -88,45 +89,53 @@ def index():
     accountingoptions = ''
     for i in range(6):
         accountingoptions += '<option value="%i"%s>%i</option>' % (i, (' selected="selected"' if accounting == i else ''), i)
-    taxlevel = (1 - (accounting * 0.1)) * 0.01
+    sortoptions = ''
+    for i in range(2):
+        sortoptions += '<option value="%i"%s>%s</option>' % (i, (' selected="selected"' if sortby == i else ''), sortstrings[i])
     output += '<label>Accounting skill </label><select name=accounting>%s</select> (tax level %.2f %%)<br>\n' % (accountingoptions, taxlevel * 100)
+    output += '<label>Sort by </label><select name=sortby>%s</select><br>\n' % (sortoptions)
     output += '<label>&nbsp;</label><input type="submit" value="Reload"><br>\n'
     output += '</form> <br>\n'
 
-    counter = 0
-    for stype, sdata in sell:
-        for btype, bdata in buy:
-            if stype == btype:
-                # 0 = price, 1 = volremaining, 2 = stationid, 3 = regionid
-                if bdata[0] > sdata[0]:
-                    item = cfg.invtypes.Get(stype)
-                    diff = bdata[0] - sdata[0]
-                    tradable = min(sdata[1], bdata[1])
+    results = []
+    for typeid, sellitems in sell.iteritems():
+        for sellitem in sellitems:
+            for buyitem in buy.get(typeid, []):
+                if buyitem.price > sellitem.price:
+                    
+                    item = cfg.invtypes.Get(typeid)
+                    diff = buyitem.price - sellitem.price
+                    tradable = min(sellitem.volRemaining, buyitem.volRemaining)
                     movable = min(tradable, int(cargolimit/item.volume))
-                    investment = tradable * sdata[0]
-                    triptax = movable * bdata[0] * taxlevel
+                    investment = tradable * sellitem.price
+                    triptax = movable * buyitem.price * taxlevel
                     tripprofit = (movable * diff) - triptax
-                    tax = tradable * bdata[0] * taxlevel
+                    tax = tradable * buyitem.price * taxlevel
                     profit = (tradable * diff) - tax
                     
-                    if (bytrip and tripprofit > profitlimit) or (byprofit and profit > profitlimit):
-                        output += '<strong><a href="javascript:CCPEVE.showMarketDetails(%i)">%s</a></strong> <br>\n' % (stype, item.name)
-                        output += '<label>From:</label> <a href="javascript:CCPEVE.showInfo(3867, %i)">%s</a>, %s <br>\n' % \
-                                    (sdata[2], cfg.evelocations.Get(sdata[2]).name, cfg.evelocations.Get(sdata[3]).name)                    
-                        output += '<label>To:</label> <a href="javascript:CCPEVE.showInfo(3867, %i)">%s</a>, %s <br>\n' % \
-                                    (bdata[2], cfg.evelocations.Get(bdata[2]).name, cfg.evelocations.Get(bdata[3]).name)
-                        output += '<label>Units tradable:</label><span class="right">%i (%i -> %i)</span> <br>\n' % (tradable, sdata[1], bdata[1])
-                        output += '<label>Units per trip:</label><span class="right">%i (%.2f m&#179; each)</span> <br>\n' % (movable, item.volume)
-                        output += '<label>Sell price:</label><span class="right">%s</span> <br>\n' % iskstring(sdata[0])
-                        output += '<label>Buy price:</label><span class="right">%s</span> <br>\n' % iskstring(bdata[0])
-                        output += '<label>Investment:</label><span class="right">%s</span> <br>\n' % iskstring(investment)
-                        output += '<label>Total tax:</label><span class="right">%s</span> <br>\n' % iskstring(tax)
-                        output += '<label>Profit per trip:</label><span class="right total">%s</span> <br>\n' % iskstring(tripprofit)
-                        output += '<label>Potential profit:</label><span class="right total">%s</span> <br>\n' % iskstring(profit)
-                        output += '<br>\n'
-                        counter += 1
-    if counter == 0:
+                    if len(results) < resultlimit and (sortby == 0 and tripprofit > profitlimit) or (sortby == 1 and profit > profitlimit):
+                        result = ''
+                        result += '<strong><a href="javascript:CCPEVE.showMarketDetails(%i)">%s</a></strong> <br>\n' % (typeid, item.name)
+                        result += '<label>From:</label> <a href="javascript:CCPEVE.showInfo(3867, %i)">%s</a>, %s <br>\n' % \
+                                    (sellitem.stationID, cfg.evelocations.Get(sellitem.stationID).name, cfg.evelocations.Get(sellitem.regionID).name)                    
+                        result += '<label>To:</label> <a href="javascript:CCPEVE.showInfo(3867, %i)">%s</a>, %s <br>\n' % \
+                                    (buyitem.stationID, cfg.evelocations.Get(buyitem.stationID).name, cfg.evelocations.Get(buyitem.regionID).name)
+                        result += '<label>Units tradable:</label><span class="right">%i (%i -> %i)</span> <br>\n' % (tradable, sellitem.volRemaining, buyitem.volRemaining)
+                        result += '<label>Units per trip:</label><span class="right">%i (%.2f m&#179; each)</span> <br>\n' % (movable, item.volume)
+                        result += '<label>Sell price:</label><span class="right">%s</span> <br>\n' % iskstring(sellitem.price)
+                        result += '<label>Buy price:</label><span class="right">%s</span> <br>\n' % iskstring(buyitem.price)
+                        result += '<label>Investment:</label><span class="right">%s</span> <br>\n' % iskstring(investment)
+                        result += '<label>Total tax:</label><span class="right">%s</span> <br>\n' % iskstring(tax)
+                        result += '<label>Profit per trip:</label><span class="right total">%s</span> <br>\n' % iskstring(tripprofit)
+                        result += '<label>Potential profit:</label><span class="right total">%s</span> <br>\n' % iskstring(profit)
+                        result += '<br>\n'
+                        results.append([tripprofit, profit, result])
+
+    if len(results) == 0:
         output += 'No trades found.\n'
+    else:
+        for result in sorted(results, key = lambda result: result[sortby], reverse=True):
+            output += result[2]
 
     output += '</body>\n'
     output += '</html>'
