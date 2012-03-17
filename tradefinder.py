@@ -250,7 +250,7 @@ headscript = '''
     timers = []
     active = false
     millis = 3000
-    proglength = $("#progress").css("width")
+    proglength = 150
 
     function loopDots() {
         s = $("#scan").html()
