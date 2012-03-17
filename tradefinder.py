@@ -27,9 +27,9 @@ sortby = 0            # selected sort option, see list below
 SORTSTRINGS = ['Trip profit', 'Total profit', 'Profit per jump']
 RESULTLIMIT = 100     # limit for total number of results
 
-def real_age(s):
+def real_age(t):
     '''Time since an EVE timestamp in hours'''
-    return (time.time() - ((s - 116444736000000000) / 10000000)) / 3600
+    return (time.time() - ((t - 116444736000000000) / 10000000)) / 3600
 
 def isk_string(isk):
     '''Convert a number to a string on the form "1,000.00 ISK"'''
@@ -139,8 +139,6 @@ def index():
     output += '<h1>Trade finder</h1>\n'
     if not request.headers.get('Eve-Trusted') == 'Yes':
         output += '<script>CCPEVE.requestTrust("http://localhost")</script>\n'
-        output += '<strong class="">Please make this site is trusted, this will give you better links.</strong> <br><br>\n'
-
     output += '<form action="/" method="get">\n'
     output += '<label>Profit limit </label><input type="text" name="profitlimit" value="%i"> ISK<br>\n' % profitlimit
     output += '<label>Cache time limit </label><input type="text" name="timelimit" value="%i"> hours<br>\n' % timelimit
@@ -252,6 +250,7 @@ headscript = '''
     timers = []
     active = false
     millis = 3000
+    proglength = $("#progress").css("width")
 
     function loopDots() {
         s = $("#scan").html()
@@ -263,7 +262,7 @@ headscript = '''
     }
 
     function callMarket(i, typeid) {
-        barlength = 150 / selected.length * (i + 1)
+        barlength = proglength / selected.length * (i + 1)
         $("#bar").css("width", barlength)
         CCPEVE.showMarketDetails(typeid)
     }
@@ -271,7 +270,7 @@ headscript = '''
     function toggleMarketScan() {
         if (!active && selected.length > 0) {
             active = true
-            timers[0] = setInterval("loopDots()", 750)
+            timers[0] = setInterval("loopDots()", millis/4)
             for (i = 0; i < selected.length; i++) {
                 timers[i+1] = setTimeout("callMarket("+i+", "+selected[i]+")", i*millis)
             }
