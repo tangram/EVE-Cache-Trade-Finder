@@ -11,7 +11,7 @@ from bottle import route, request, run
 from collections import deque
 import data
 
-EVEROOT = 'C:\Program Files (x86)\EVE Online'
+EVEROOT = 'C:\Program Files (x86)\CCP\EVE'
 
 eve = blue.EVE(EVEROOT)
 cfg = eve.getconfigmgr()
