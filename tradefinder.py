@@ -1,4 +1,4 @@
-# EVE Cache Trade Finder v0.6
+# EVE Cache Trade Finder v0.7
 # Copyright (C) 2012 by Eirik Krogstad
 # Licenced under the MIT License, see http://www.opensource.org/licenses/MIT
 # Requires the Python libraries Bottle and Reverence
@@ -19,7 +19,7 @@ cachemgr = eve.getcachemgr()
 
 # initial configuration
 profitlimit = 1000000 # ISK
-timelimit = 1         # hours
+timelimit = 24        # hours
 cargolimit = 1000     # m3
 accounting = 0        # accounting skill level
 sortby = 0            # selected sort option, see list below
@@ -35,6 +35,10 @@ def isk_string(isk):
     '''Convert a number to a string on the form "1,000.00 ISK"'''
     return '{0:,.2f} ISK'.format(isk)
 
+def sec_class(sec):
+    '''Convert security float to a letter for link coloring'''
+    return chr(int(75 - (sec * 10))) if sec > 0 else 'X'
+
 def breadth_first_search(graph, start):
     '''General breadth first search'''
     queue, enqueued = deque([(None, start)]), set([start])
@@ -47,16 +51,17 @@ def breadth_first_search(graph, start):
 
 def shortest_path(graph, start, end):
     '''Finds the shortest path in a set of paths'''
+    if start == 0 or end == 0:
+        return []
     paths = {None: []}
     for parent, child in breadth_first_search(graph, start):
         paths[child] = paths[parent] + [child]
         if child == end:
             return paths[child]
-    return None
+    return []
 
-def path_length(graph, start, end):
-    '''Get the length of the shortest path'''
-    path = shortest_path(graph, start, end)
+def path_length(path):
+    '''Get the length of a path'''
     if path:
         return len(path) - 1
     return 0
@@ -68,7 +73,7 @@ head = '''
 <title>%s</title>
 <style>
     body { background: #111; color: #ddd; font: 12px/18px Arial, sans-serif }
-    a { color: #fa6; text-decoration: none }
+    a { color: #ccf; text-decoration: none }
     a:hover { text-decoration: underline }
     #links a { font-size: 1.25em; font-weight: bold }
     h1 { font-size: 2em }
@@ -88,12 +93,23 @@ head = '''
     select { padding: 0 }
     #scan { width: 150px; margin-right: 1em }
     #progress { border: 1px solid #ddd; height: 10px; width: 150px; top: 1px;
-                display: inline-block; position: relative; margin-top: 0.5em }
+                display: inline-block; position: relative; margin: 0.5em 1em 0 0 }
     #bar { background: #666; height: 10px; width: 0; display: block;
            position: relative; overflow: hidden }
     input[type="checkbox"] { width: 15px }
     .floater { margin: 0 2em 2em 0; float: left; }
     .checker { min-width: 200px }
+    .A { color: #5f5 }
+    .B { color: #7f5 }
+    .C { color: #9f5 }
+    .D { color: #bf5 }
+    .E { color: #df5 }
+    .F { color: #ff5 }
+    .G { color: #fd5 }
+    .H { color: #fb5 }
+    .I { color: #f95 }
+    .J { color: #f75 }
+    .X { color: #f55 }
 </style>
 '''
 headend = '</head>'
@@ -117,7 +133,7 @@ def index():
     sell = {}
     buy = {}
     for key, obj in cmc.iteritems():
-        if key[1] == 'GetOrders' and real_age(obj['runid']) < timelimit:
+        if key[1] == 'GetOrders' and real_age(obj['used']) < timelimit:
             # 0 = sell orders, 1 = buy orders
             for row in obj['lret'][0]:
                 if row.typeID in sell:
@@ -185,20 +201,28 @@ def index():
                         smd = 'javascript:CCPEVE.showMarketDetails'
                         si = 'javascript:CCPEVE.showInfo'
                         result = '<strong><a href="%s(%i)">%s</a></strong> <br>\n' % (smd, typeid, item.name)
-                        result += '<label>From:</label> <a href="%s(3867, %i)">%s</a>, %s <br>\n' % \
-                                  (si, sellitem.stationID, 
+                        sellsec = data.security[sellitem.solarSystemID]
+                        result += '<label>From:</label> <a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n' % \
+                                  (sec_class(sellsec), si, sellitem.stationID, sellsec, 
                                    cfg.evelocations.Get(sellitem.stationID).name, 
-                                   cfg.evelocations.Get(sellitem.regionID).name)                    
-                        result += '<label>To:</label> <a href="%s(3867, %i)">%s</a>, %s <br>\n' % \
-                                  (si, buyitem.stationID, 
+                                   cfg.evelocations.Get(sellitem.regionID).name)
+                        buysec = data.security[buyitem.solarSystemID]                
+                        result += '<label>To:</label> <a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n' % \
+                                  (sec_class(buysec), si, buyitem.stationID, buysec,
                                    cfg.evelocations.Get(buyitem.stationID).name,
                                    cfg.evelocations.Get(buyitem.regionID).name)
-                        fromcurrent = path_length(data.jumps, currentsystem, sellitem.solarSystemID)
-                        fromsell = path_length(data.jumps, sellitem.solarSystemID, buyitem.solarSystemID)
-                        totaljumps = fromcurrent + fromsell
+                        path1 = shortest_path(data.jumps, currentsystem, sellitem.solarSystemID)
+                        path2 = shortest_path(data.jumps, sellitem.solarSystemID, buyitem.solarSystemID)
+                        lowsecwarning = ''
+                        for system in path1 + path2:
+                            if data.security[system] < 0.5:
+                                lowsecwarning = '<span class="X">(through lowsec)</span>'
+                        jumpsfromcurrent = path_length(path1)
+                        jumpsfromsell = path_length(path2)
+                        totaljumps = jumpsfromcurrent + jumpsfromsell
                         jumpprofit = tripprofit / (totaljumps + 1)
-                        result += '<label>Jumps:</label><span class="right">%i (%i from current location, %i seller -> buyer)</span> <br>\n' % \
-                                  (totaljumps, fromcurrent, fromsell)  
+                        result += '<label>Jumps:</label><span class="right">%i (%i from current location, %i seller -> buyer) %s</span> <br>\n' % \
+                                  (totaljumps, jumpsfromcurrent, jumpsfromsell, lowsecwarning)  
                         result += '<label>Units tradable:</label><span class="right">%i (%i -> %i)</span> <br>\n' % \
                                   (tradable, sellitem.volRemaining, buyitem.volRemaining)
                         result += '<label>Units per trip:</label><span class="right">%i (%.2f m&#179; each)</span> <br>\n' % \
@@ -225,7 +249,7 @@ def index():
         output += 'No trades found.\n'
     else:
         for result in sorted(results, key=lambda x: x[sortby], reverse=True):
-            output += result[3]
+            output += result[len(SORTSTRINGS)]
 
     output += '</body>\n'
     output += '</html>'
@@ -249,21 +273,23 @@ headscript = '''
     selected = []
     timers = []
     active = false
+    proglength = 150
     millis = 3000
-    proglength = $("#progress").css("width")
+    n = 1
 
     function loopDots() {
-        s = $("#scan").html()
+        s = $("#scan").text()
         if (s.length < 11)
             s += "."
         else
             s = "Scanning"
-        $("#scan").html(s)
+        $("#scan").text(s)
     }
 
-    function callMarket(i, typeid) {
-        barlength = proglength / selected.length * (i + 1)
+    function nextItem(i, typeid) {
+        barlength = proglength / n * (i + 1)
         $("#bar").css("width", barlength)
+        $("#counter").text((i + 1) + " of " + n + " scanned")
         CCPEVE.showMarketDetails(typeid)
     }
 
@@ -271,14 +297,14 @@ headscript = '''
         if (!active && selected.length > 0) {
             active = true
             timers[0] = setInterval("loopDots()", millis/4)
-            for (i = 0; i < selected.length; i++) {
-                timers[i+1] = setTimeout("callMarket("+i+", "+selected[i]+")", i*millis)
+            n = selected.length
+            for (i = 0; i < n; i++) {
+                timers[i+1] = setTimeout("nextItem("+i+", "+selected[i]+")", i*millis)
             }
-            t = selected.length
-            timers[t] = setTimeout("toggleMarketScan()", (t-1)*millis)
+            timers[n] = setTimeout("toggleMarketScan()", ((n-1)*millis)+10)
         } else {
             active = false
-            $("#scan").html("Initialize market scan")
+            $("#scan").text("Start market scan")
             clearInterval(timers[0])
             for (i = 1; i < timers.length; i++) {
                 clearTimeout(timers[i])
@@ -286,13 +312,23 @@ headscript = '''
         }
     }
 
-    function toggleGroup(n) {
-        if ($("#c"+n).attr("checked")) {
-            selected = selected.concat(typeids[n])
+    function toggleGroup(g) {
+        if ($("#c"+g).attr("checked")) {
+            selected = selected.concat(typeids[g])
         } else {
-            i = selected.indexOf(typeids[n][0])
-            selected.splice(i, typeids[n].length)
+            i = selected.indexOf(typeids[g][0])
+            selected.splice(i, typeids[g].length)
         }
+    }
+
+    function toggleHeader(h) {
+        $(h).siblings().toggle()
+        s = $(h).text()
+        if (s[s.length-1] == "-")
+            s = s.replace("-", "+")
+        else
+            s = s.replace("+", "-")
+        $(h).text(s)
     }
 </script>
 ''' % str(typeids)
@@ -304,17 +340,19 @@ def scan():
     def traversegroups(group, headerlevel):
         '''Recursive traversal of groups, outputs headers and checkboxen'''
         string = ''
-        for key, members in group.iteritems():
+        # sort empty subdictionaries first, these belong to current heading
+        for key, members in sorted(group.items(), key=lambda x: len(x[1]) > 0):
             name = data.groupnames[key]
             if members:
                 floater = ' class="floater"' if headerlevel == 2 else ''
-                string += '<div%s><h%i>%s</h%i>\n' % \
+                string += '<div%s><h%i onclick="toggleHeader(this)">%s -</h%i>\n' % \
                           (floater, headerlevel, name, headerlevel)
                 string += traversegroups(members, headerlevel+1)
                 string += '</div>'
             else:
-                string += '<div class="checker"><input type="checkbox" name="%i" id="c%i" onclick="toggleGroup(%i)">%s</div>\n' % \
-                          (key, key, key, name)
+                if key in typeids.keys():
+                    string += '<div class="checker"><input type="checkbox" name="%i" id="c%i" onclick="toggleGroup(%i)">%s</div>\n' % \
+                              (key, key, key, name)
         return string
 
     output = head % 'Automated market scanner' + headscript + headend
@@ -323,8 +361,8 @@ def scan():
     output += '<a href="/">&laquo; Back to main screen</a>\n'
     output += '</div>\n'
     output += '<h1>Automated market scanner</h1>\n'
-    output += '<button id="scan" onclick="toggleMarketScan()">Initialize market scan</button>'
-    output += '<div id="progress"> <span id="bar"></span> </div> <br>\n'
+    output += '<button id="scan" onclick="toggleMarketScan()">Start market scan</button>'
+    output += '<div id="progress"> <span id="bar"></span> </div> <span id="counter"></span><br>\n'
     output += '<div>'
     output += traversegroups(data.groupdict, 2)
     output += '</div>'

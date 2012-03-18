@@ -1,4 +1,4 @@
-# EVE Cache Trade Finder v0.6 #
+# EVE Cache Trade Finder v0.7 #
 
 Copyright (C) 2012 by Eirik Krogstad
 
@@ -17,6 +17,7 @@ This script will scan your EVE cache using [Reverence](https://github.com/ntt/re
 6. Optionally use the Automated Market Scanner to have the script browse the market for you. The market screen will take focus every three seconds, so do it while docked or travelling safely. The delay is required to make sure EVE does not deny the JavaScript calls, so the scan can take some time.
 
 ## Changelog: ##
+* v0.7 - Added system security indicators, market scanner fixes
 * v0.6 - Added calculation of jump lengths, sort by profit per jump
 * v0.5 - Added Automated Market Scanner
 * v0.4 - Massive performance increase, ability to sort by trip profit or total profit
