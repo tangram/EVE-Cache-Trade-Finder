@@ -9,6 +9,7 @@ import time
 from reverence import blue
 from bottle import route, request, run
 from collections import deque
+import textwrap
 import data
 
 EVEROOT = 'C:\Program Files (x86)\EVE Online'
@@ -25,7 +26,7 @@ accounting = 0        # accounting skill level
 sortby = 0            # selected sort option, see list below
 
 SORTSTRINGS = ['Trip profit', 'Total profit', 'Profit per jump']
-RESULTLIMIT = 100     # limit for total number of results
+RESULTLIMIT = 200     # limit for total number of results
 
 def real_age(t):
     '''Time since an EVE timestamp in hours'''
@@ -153,44 +154,54 @@ def index():
 
     output = head % 'Trade finder' + headend
     # settings section
-    output += '<body>\n'
-    output += '<div id="links">\n'
-    output += '<a href="/scan">Automated market scanner &raquo;</a>\n'
-    output += '</div>\n'
-    output += '<h1>Trade finder</h1>\n'
+    output += textwrap.dedent('''
+        <body>
+        <div id="links">
+        <a href="/scan">Automated market scanner &raquo;</a>
+        </div>
+        <h1>Trade finder</h1>
+        ''')
 
     if not request.headers.get('Eve-Trusted') == 'Yes':
-        output += '<script>CCPEVE.requestTrust("http://localhost")</script>\n'
+        output += '<script>CCPEVE.requestTrust("http://localhost")</script>'
     
-    output += '<form action="/" method="get">\n'
-    output += '<div class="labels">\n'
-    output += '<label>Profit limit</label>\n'
-    output += '<label>Cache time limit</label>\n'
-    output += '<label>Cargo limit</label>\n'
-    output += '<label>Accounting skill</label>\n'
-    output += '<label>Sort by</label>\n'
-    output += '<label>&nbsp;</label>\n'
-    output += '</div>\n'
-    
-    output += '<input type="text" name="profitlimit" value="%i"> ISK<br>\n' % profitlimit
-    output += '<input type="text" name="timelimit" value="%i"> hours<br>\n' % timelimit
-    output += '<input type="text" name="cargolimit" value="%i"> m&#179;<br>\n' % cargolimit
+    output += textwrap.dedent('''
+        <form action="/" method="get">
+        <div class="labels">
+        <label>Profit limit</label>
+        <label>Cache time limit</label>
+        <label>Cargo limit</label>
+        <label>Accounting skill</label>
+        <label>Sort by</label>
+        <label>&nbsp;</label>
+        </div>
+        <input type="text" name="profitlimit" value="%i"> ISK<br>
+        <input type="text" name="timelimit" value="%i"> hours<br>
+        <input type="text" name="cargolimit" value="%i"> m&#179;<br>''' 
+        % (profitlimit, timelimit, cargolimit))
     
     accountingoptions = ''
     for i in range(6):
         selected = ' selected="selected"' if accounting == i else ''
-        accountingoptions += '<option value="%i"%s>%i</option>' % (i, selected, i)
+        accountingoptions += ('<option value="%i"%s>%i</option>' 
+                              % (i, selected, i))
     
     sortoptions = ''
     for i in range(len(SORTSTRINGS)):
         selected = ' selected="selected"' if sortby == i else ''
-        sortoptions += '<option value="%i"%s>%s</option>' % (i, selected, SORTSTRINGS[i])
+        sortoptions += ('<option value="%i"%s>%s</option>' 
+                        % (i, selected, SORTSTRINGS[i]))
     
-    output += '<select name=accounting>%s</select> (tax level %.2f %%)<br>\n' % \
-              (accountingoptions, taxlevel * 100)
-    output += '<select name=sortby>%s</select><br>\n' % (sortoptions)
-    output += '<input type="submit" value="Reload"><br>\n'
-    output += '</form>\n'
+    output += textwrap.dedent('''
+        <select name=accounting>
+        %s
+        </select> (tax level %.2f %%)<br>
+        <select name=sortby>
+        %s
+        </select><br>
+        <input type="submit" value="Reload"><br>
+        </form>
+        ''' % (accountingoptions, taxlevel * 100, sortoptions))
 
     currentsystem = int(request.headers.get('Eve-SolarSystemID') or 0)
 
@@ -215,44 +226,21 @@ def index():
                     if sellitem.stationID == buyitem.stationID:
                         tripprofit = profit
                     
-                    if len(results) < RESULTLIMIT and \
-                       (sortby == 0 and tripprofit > profitlimit) or \
-                       (sortby == 1 and profit > profitlimit) or \
-                       (sortby == 2 and tripprofit > profitlimit):
+                    if (len(results) < RESULTLIMIT and
+                       (sortby == 0 and tripprofit > profitlimit) or
+                       (sortby == 1 and profit > profitlimit) or
+                       (sortby == 2 and tripprofit > profitlimit)):
                         # add result to result list
-                        smd = 'javascript:CCPEVE.showMarketDetails'
-                        si = 'javascript:CCPEVE.showInfo'
-
-                        result = '<h2 class="item"><a href="%s(%i)">%s</a></h2>\n' % \
-                                 (smd, typeid, item.name)
-                        result += '<div class="labels">\n'
-                        result += '<label>From:</label>\n'
-                        result += '<label>To:</label>\n'
-                        result += '<label>Jumps:</label>\n'
-                        result += '<label>Units tradable:</label>\n'
-                        result += '<label>Units per trip:</label>\n'
-                        result += '<label>Sell price:</label>\n'
-                        result += '<label>Buy price:</label>\n'
-                        result += '<label>Investment:</label>\n'
-                        result += '<label>Total tax:</label>\n'
-                        result += '<label>Profit per jump:</label>\n'
-                        result += '<label>Profit per trip:</label>\n'
-                        result += '<label>Potential profit:</label>\n'
-                        result += '</div>\n'
-
+                        # further calculations
                         sellsec = data.security[sellitem.solarSystemID]
-                        result += '<a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n' % \
-                                  (sec_class(sellsec), si, sellitem.stationID, sellsec, 
-                                   cfg.evelocations.Get(sellitem.stationID).name, 
-                                   cfg.evelocations.Get(sellitem.regionID).name)
-                        buysec = data.security[buyitem.solarSystemID]                
-                        result += '<a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n' % \
-                                  (sec_class(buysec), si, buyitem.stationID, buysec,
-                                   cfg.evelocations.Get(buyitem.stationID).name,
-                                   cfg.evelocations.Get(buyitem.regionID).name)
+                        buysec = data.security[buyitem.solarSystemID]
 
-                        path1 = shortest_path(data.jumps, currentsystem, sellitem.solarSystemID)
-                        path2 = shortest_path(data.jumps, sellitem.solarSystemID, buyitem.solarSystemID)
+                        path1 = shortest_path(data.jumps, 
+                                              currentsystem, 
+                                              sellitem.solarSystemID)
+                        path2 = shortest_path(data.jumps, 
+                                              sellitem.solarSystemID, 
+                                              buyitem.solarSystemID)
                         
                         lowsecwarning = ''
                         for system in path1 + path2:
@@ -264,27 +252,60 @@ def index():
                         totaljumps = jumpsfromcurrent + jumpsfromsell
                         jumpprofit = tripprofit / (totaljumps + 1)
 
-                        result += '<span>%i (%i from current location, %i seller -> buyer) %s</span> <br>\n' % \
-                                  (totaljumps, jumpsfromcurrent, jumpsfromsell, lowsecwarning)  
+                        smd = 'javascript:CCPEVE.showMarketDetails'
+                        si = 'javascript:CCPEVE.showInfo'
+
+                        result = ('<h2 class="item"><a href="%s(%i)">%s</a></h2>'
+                                  % (smd, typeid, item.name))
+
+                        result += textwrap.dedent('''
+                            <div class="labels">
+                            <label>From:</label>
+                            <label>To:</label>
+                            <label>Jumps:</label>
+                            <label>Units tradable:</label>
+                            <label>Units per trip:</label>
+                            <label>Sell price:</label>
+                            <label>Buy price:</label>
+                            <label>Investment:</label>
+                            <label>Total tax:</label>
+                            <label>Profit per jump:</label>
+                            <label>Profit per trip:</label>
+                            <label>Potential profit:</label>
+                            </div>
+                            ''')
+    
+                        result += ('<a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n'
+                                   % (sec_class(sellsec), si, sellitem.stationID, sellsec, 
+                                      cfg.evelocations.Get(sellitem.stationID).name, 
+                                      cfg.evelocations.Get(sellitem.regionID).name))
+                                        
+                        result += ('<a class="%s" href="%s(3867, %i)">(%.1f) %s</a>, %s <br>\n'
+                                   % (sec_class(buysec), si, buyitem.stationID, buysec,
+                                      cfg.evelocations.Get(buyitem.stationID).name,
+                                      cfg.evelocations.Get(buyitem.regionID).name))
+
+                        result += ('<span>%i (%i from current location, %i seller -> buyer) %s</span> <br>\n'
+                                   % (totaljumps, jumpsfromcurrent, jumpsfromsell, lowsecwarning)  )
                         result += '<div class="stats">\n'
-                        result += '<span>%i (%i -> %i)</span> <br>\n' % \
-                                  (tradable, sellitem.volRemaining, buyitem.volRemaining)
-                        result += '<span>%i (%.2f m&#179; each)</span> <br>\n' % \
-                                  (movable, item.volume)
-                        result += '<span>%s</span> <br>\n' % \
-                                  isk_string(sellitem.price)
-                        result += '<span>%s</span> <br>\n' % \
-                                  isk_string(buyitem.price)
-                        result += '<span>%s</span> <br>\n' % \
-                                  isk_string(investment)
-                        result += '<span>%s</span> <br>\n' % \
-                                  isk_string(tax)
-                        result += '<span class="total">%s</span> <br>\n' % \
-                                  isk_string(jumpprofit)
-                        result += '<span class="total">%s</span> <br>\n' % \
-                                  isk_string(tripprofit)
-                        result += '<span class="total">%s</span> <br>\n' % \
-                                  isk_string(profit)
+                        result += ('<span>%i (%i -> %i)</span> <br>\n'
+                                   % (tradable, sellitem.volRemaining, buyitem.volRemaining))
+                        result += ('<span>%i (%.2f m&#179; each)</span> <br>\n'
+                                   % (movable, item.volume))
+                        result += ('<span>%s</span> <br>\n'
+                                   % isk_string(sellitem.price))
+                        result += ('<span>%s</span> <br>\n'
+                                   % isk_string(buyitem.price))
+                        result += ('<span>%s</span> <br>\n'
+                                   % isk_string(investment))
+                        result += ('<span>%s</span> <br>\n'
+                                   % isk_string(tax))
+                        result += ('<span class="total">%s</span> <br>\n'
+                                   % isk_string(jumpprofit))
+                        result += ('<span class="total">%s</span> <br>\n'
+                                   % isk_string(tripprofit))
+                        result += ('<span class="total">%s</span> <br>\n'
+                                   % isk_string(profit))
                         result += '</div> <br>\n'
 
                         results.append([tripprofit, profit, jumpprofit, result])
@@ -293,11 +314,10 @@ def index():
     if len(results) == 0:
         output += 'No trades found.\n'
     else:
-        for result in sorted(results, key=lambda x: x[sortby], reverse=True):
-            output += result[len(SORTSTRINGS)]
+        output += ''.join(r[len(SORTSTRINGS)] for r in sorted(results, key=lambda x: x[sortby], reverse=True))
 
-    output += '</body>\n'
-    output += '</html>'
+    output += ('</body>\n'
+               '</html>')
 
     return output
 
@@ -390,33 +410,40 @@ def scan():
             name = data.groupnames[key]
             if members:
                 floater = ' class="floater"' if headerlevel == 2 else ''
-                string += '<div%s><h%i onclick="toggleHeader(this)">%s -</h%i>\n' % \
-                          (floater, headerlevel, name, headerlevel)
+                string += ('<div%s><h%i onclick="toggleHeader(this)">%s -</h%i>\n' 
+                           % (floater, headerlevel, name, headerlevel))
                 string += traversegroups(members, headerlevel+1)
-                string += '</div>'
+                string += '</div>\n'
             else:
                 if key in typeids.keys():
                     string += '<div class="checker">'
-                    string += '<input type="checkbox" name="%i" id="c%i" onclick="toggleGroup(%i)">%s' % \
-                              (key, key, key, name)
+                    string += ('<input type="checkbox" name="%i" id="c%i" onclick="toggleGroup(%i)">%s' 
+                               % (key, key, key, name))
                     string += '</div>\n'
         return string
 
     output = head % 'Automated market scanner' + headscript + headend
-    output += '<body>\n'
-    output += '<div id="links">\n'
-    output += '<a href="/">&laquo; Back to main screen</a>\n'
-    output += '</div>\n'
-    output += '<h1>Automated market scanner</h1>\n'
-    output += '<button id="scan" onclick="toggleMarketScan()">Start market scan</button>'
-    output += '<div id="progress"> <span id="bar"></span> </div> <span id="counter"></span><br>\n'
-    output += '<div>'
+    output += textwrap.dedent('''
+        <body>
+        <div id="links">
+        <a href="/">&laquo; Back to main screen</a>
+        </div>
+        <h1>Automated market scanner</h1>
+        <button id="scan" onclick="toggleMarketScan()">Start market scan</button>
+        <div id="progress"> <span id="bar"></span> </div> <span id="counter"></span><br>
+        <div>''')
     output += traversegroups(data.groupdict, 2)
-    output += '</div>'
-    output += '</body>\n'
-    output += '</html>'
+    output += textwrap.dedent('''
+        </div>
+        </body>
+        </html>''')
 
     return output
 
-# run server
-run(host='localhost', port=80, reloader=True)
+def main():
+    # run server
+    run(host='localhost', port=80, reloader=True)
+
+if __name__ == '__main__':
+    status = main()
+    sys.exit(status)
