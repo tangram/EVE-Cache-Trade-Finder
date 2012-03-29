@@ -11,7 +11,7 @@ This script will scan your EVE cache using [Reverence](https://github.com/ntt/re
 Donations to `Stella Singularity` accepted :)
 
 ## Usage: ##
-1. Make sure you have Reverence and Bottle installed
+1. Make sure you have Reverence and Bottle installed (bottle.py can be placed in the same directory as this, for Reverence, try an [installer](https://github.com/ntt/reverence/downloads))
 2. Edit the script with the path to your EVE installation
 3. View Market Details for several items in EVE, preferably in different regions. You only need to visit the market page. See also point 6.
 4. Start the script with `python tradefinder.py`
