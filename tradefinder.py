@@ -445,5 +445,4 @@ def main():
     run(host='localhost', port=80, reloader=True)
 
 if __name__ == '__main__':
-    status = main()
-    sys.exit(status)
+    main()
