@@ -8,6 +8,8 @@ I played a bit of EVE Online and got into trading. I found the [EVE-Central](htt
 
 This script will scan your EVE cache using [Reverence](https://github.com/ntt/reverence), find potential trades, and output a web page with the results to `http://localhost` using [Bottle](https://github.com/defnull/bottle), which can then be opened in the in-game browser.
 
+Donations to `Stella Singularity` accepted :)
+
 ## Usage: ##
 1. Make sure you have Reverence and Bottle installed
 2. Edit the script with the path to your EVE installation
