@@ -12,7 +12,7 @@ from collections import deque
 import textwrap
 import data
 
-EVEROOT = 'C:\Program Files (x86)\EVE Online'
+EVEROOT = 'C:\Program Files (x86)\CCP\EVE'
 
 eve = blue.EVE(EVEROOT)
 cfg = eve.getconfigmgr()
