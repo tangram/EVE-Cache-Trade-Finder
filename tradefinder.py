@@ -41,7 +41,7 @@ def sec_class(sec):
     return chr(int(75 - (sec * 10))) if sec > 0 else 'X'
 
 def breadth_first_search(graph, start):
-    '''General breadth first search'''
+    '''General breadth first search generator'''
     queue, enqueued = deque([(None, start)]), set([start])
     while queue:
         parent, n = queue.popleft()
@@ -67,6 +67,27 @@ def path_length(path):
         return len(path) - 1
     return 0
 
+def index_orders(timelimit = timelimit):
+    '''Index sell and buy data'''
+    cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
+    sell = {}
+    buy = {}
+    for key, obj in cmc.iteritems():
+        if key[1] == 'GetOrders' and real_age(obj['used']) < timelimit:
+            # 0 = sell orders, 1 = buy orders
+            for row in obj['lret'][0]:
+                if row.typeID in sell:
+                    sell[row.typeID].append(row)
+                else:
+                    sell[row.typeID] = [row]
+
+            for row in obj['lret'][1]:
+                if row.typeID in buy:
+                    buy[row.typeID].append(row)
+                else:
+                    buy[row.typeID] = [row]
+    return sell, buy
+
 head = '''
 <!doctype html>
 <html>
@@ -84,10 +105,10 @@ head = '''
     h2.item { clear: both; margin: 0.5em 0; font-size: 1.2em }
     a, .item { color: #ccf; text-decoration: none }
     a:hover { text-decoration: underline }
-    #links a { font-size: 1.25em; font-weight: bold }
-    input, select, button { width: 115px; padding: 0 2px; background: #333; 
-                            color: #fff; border: 1px solid #ddd; 
-                            -webkit-box-sizing: border-box }
+    #links a { font-size: 1.25em; font-weight: bold; margin-right: 1em }
+    input, select, button { width: 115px; padding: 0 2px; margin-right: 0.5em;
+                            background: #333; color: #fff; 
+                            border: 1px solid #ddd; -webkit-box-sizing: border-box }
     .stats, input[type="text"] { text-align: right }
     .labels, .stats { float: left; min-width: 120px }
     .labels { clear: left; margin: 0 0 2em }
@@ -104,6 +125,8 @@ head = '''
     input[type="checkbox"] { width: 15px }
     .floater { margin: 0 2em 2em 0; float: left; }
     .checker { min-width: 200px }
+    .checkchecker { font-size: 10px; margin-left: 3px }
+    .checkchecker input[type="checkbox"] { height: 9px; width: 9px; padding: 0 }
     .A { color: #5f5 }
     .B { color: #7f5 }
     .C { color: #9f5 }
@@ -124,8 +147,6 @@ def index():
     '''Main page; Trade finder'''
     global profitlimit, timelimit, cargolimit, accounting, sortby
 
-    cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
-
     # set user variables from url string
     profitlimit = int(request.query.profitlimit or profitlimit)
     timelimit = int(request.query.timelimit or timelimit)
@@ -134,23 +155,7 @@ def index():
     sortby = int(request.query.sortby or sortby)
     taxlevel = (1 - (accounting * 0.1)) * 0.01
 
-    # index sell and buy data
-    sell = {}
-    buy = {}
-    for key, obj in cmc.iteritems():
-        if key[1] == 'GetOrders' and real_age(obj['used']) < timelimit:
-            # 0 = sell orders, 1 = buy orders
-            for row in obj['lret'][0]:
-                if row.typeID in sell:
-                    sell[row.typeID].append(row)
-                else:
-                    sell[row.typeID] = [row]
-
-            for row in obj['lret'][1]:
-                if row.typeID in buy:
-                    buy[row.typeID].append(row)
-                else:
-                    buy[row.typeID] = [row]
+    sell, buy = index_orders(timelimit)
 
     output = head % 'Trade finder' + headend
     # settings section
@@ -331,7 +336,7 @@ for invtype in cfg.invtypes:
             typeids[invtype['marketGroupID']] = [invtype['typeID']]
 
 # header javascript for market scanner
-headscript = '''
+scannerscript = '''
 <script src="http://code.jquery.com/jquery.min.js"></script>
 <script>
     typeids = %s
@@ -381,9 +386,23 @@ headscript = '''
         if ($("#c"+g).attr("checked")) {
             selected = selected.concat(typeids[g])
         } else {
-            i = selected.indexOf(typeids[g][0])
-            selected.splice(i, typeids[g].length)
+            p = selected.indexOf(typeids[g][0])
+            selected.splice(p, typeids[g].length)
         }
+    }
+
+    function toggleSet(box, set) {
+        if ($(box).attr("checked")) {
+            for (i = 0; i < set.length; i++) {
+                $("#c"+set[i]).attr("checked", true)
+                toggleGroup(set[i])
+            }
+        } else {
+            for (i = 0; i < set.length; i++) {
+                $("#c"+set[i]).attr("checked", false)
+                toggleGroup(set[i])
+            }
+        }        
     }
 
     function toggleHeader(h) {
@@ -401,14 +420,19 @@ headscript = '''
 @route('/scan')
 def scan():
     '''Automated market scanner page'''
-
     def traversegroups(group, headerlevel):
         '''Recursive traversal of groups, outputs headers and checkboxen'''
         string = ''
+        checklist = []
         # sort empty subdictionaries first, these belong to current heading
         for key, members in sorted(group.items(), key=lambda x: len(x[1]) > 0):
             name = data.groupnames[key]
             if members:
+                if checklist:
+                    string += '<div class="checkchecker">'
+                    string += '<input type="checkbox" onclick="toggleSet(this, %s)">All/none' % str(checklist)
+                    string += '</div>\n'
+                    checklist = []
                 floater = ' class="floater"' if headerlevel == 2 else ''
                 string += ('<div%s><h%i onclick="toggleHeader(this)">%s -</h%i>\n' 
                            % (floater, headerlevel, name, headerlevel))
@@ -420,13 +444,18 @@ def scan():
                     string += ('<input type="checkbox" name="%i" id="c%i" onclick="toggleGroup(%i)">%s' 
                                % (key, key, key, name))
                     string += '</div>\n'
+                    checklist.append(key)
+        if checklist:
+            string += '<div class="checkchecker">'
+            string += '<input type="checkbox" onclick="toggleSet(this, %s)">All/none' % str(checklist)
+            string += '</div>\n'
         return string
 
-    output = head % 'Automated market scanner' + headscript + headend
+    output = head % 'Automated market scanner' + scannerscript + headend
     output += textwrap.dedent('''
         <body>
         <div id="links">
-        <a href="/">&laquo; Back to main screen</a>
+        <a href="/">&laquo; Back to main screen</a>     
         </div>
         <h1>Automated market scanner</h1>
         <button id="scan" onclick="toggleMarketScan()">Start market scan</button>
@@ -440,9 +469,6 @@ def scan():
 
     return output
 
-def main():
+if __name__ == '__main__':
     # run server
     run(host='localhost', port=80, reloader=True)
-
-if __name__ == '__main__':
-    main()
