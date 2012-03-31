@@ -1,4 +1,4 @@
-# EVE Cache Trade Finder v0.7
+# EVE Cache Trade Finder v0.8
 # Copyright (C) 2012 by Eirik Krogstad
 # Licenced under the MIT License, see http://www.opensource.org/licenses/MIT
 # Requires the Python libraries Bottle and Reverence
@@ -11,12 +11,19 @@ from bottle import route, request, run
 from collections import deque
 import textwrap
 import data
+import eveapi
 
 EVEROOT = 'C:\Program Files (x86)\CCP\EVE'
 
 eve = blue.EVE(EVEROOT)
 cfg = eve.getconfigmgr()
 cachemgr = eve.getcachemgr()
+
+API_KEYID = 123456
+API_VCODE = "alphanumericverificationcodegoeshere"
+
+api = eveapi.EVEAPIConnection()
+auth = api.auth(keyID=API_KEYID, vCode=API_VCODE)
 
 # initial configuration
 profitlimit = 1000000 # ISK
@@ -25,8 +32,8 @@ cargolimit = 1000     # m3
 accounting = 0        # accounting skill level
 sortby = 0            # selected sort option, see list below
 
-SORTSTRINGS = ['Trip profit', 'Total profit', 'Profit per jump']
-RESULTLIMIT = 200     # limit for total number of results
+SORTSTRINGS = ['Trip profit', 'Total profit', 'Jump profit']
+RESULTLIMIT = 100     # limit for total number of results
 
 def real_age(t):
     '''Time since an EVE timestamp in hours'''
@@ -67,7 +74,7 @@ def path_length(path):
         return len(path) - 1
     return 0
 
-def index_orders(timelimit = timelimit):
+def index_market(timelimit = timelimit):
     '''Index sell and buy data'''
     cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
     sell = {}
@@ -93,22 +100,29 @@ head = '''
 <html>
 <head>
 <title>%s</title>
+
 <style>
     body { background: #111; color: #ddd; font: 12px/18px Arial, sans-serif }
     h1 { font-size: 2em }
-    h2 { font-size: 1.6em; color: #9f5 }
-    h3 { font-size: 1.4em; color: #bd5 }
-    h4 { font-size: 1.3em; color: #db5 }
-    h5 { font-size: 1.2em; color: #f95 }
+    h2 { font-size: 1.5em; color: #9f5 }
+    h3 { font-size: 1.3em; color: #bd5 }
+    h4 { font-size: 1.2em; color: #db5 }
+    h5 { font-size: 1.1em; color: #f95 }
     h1, h2, h3, h4, h5 { line-height: 1em; margin: 0.5em 0 }
     h1 { background: #333; padding: 0.25em }
     h2.item { clear: both; margin: 0.5em 0; font-size: 1.2em }
-    a, .item { color: #ccf; text-decoration: none }
+    a, .item { color: #cce; text-decoration: none }
     a:hover { text-decoration: underline }
-    #links a { font-size: 1.25em; font-weight: bold; margin-right: 1em }
+    #links a, #links #current { font-size: 1.25em; font-weight: bold; margin-right: 1em }
+    #links #current { color: #aaa }
     input, select, button { width: 115px; padding: 0 2px; margin-right: 0.5em;
                             background: #333; color: #fff; 
                             border: 1px solid #ddd; -webkit-box-sizing: border-box }
+    table { margin: 0 0 1em }
+    td, th { padding-right: 2em }
+    th { text-align: left }
+    .ralign { text-align: right }
+    #scancheck { position: relative; top: 2px }
     .stats, input[type="text"] { text-align: right }
     .labels, .stats { float: left; min-width: 120px }
     .labels { clear: left; margin: 0 0 2em }
@@ -155,14 +169,16 @@ def index():
     sortby = int(request.query.sortby or sortby)
     taxlevel = (1 - (accounting * 0.1)) * 0.01
 
-    sell, buy = index_orders(timelimit)
+    sell, buy = index_market(timelimit)
 
     output = head % 'Trade finder' + headend
     # settings section
     output += textwrap.dedent('''
         <body>
         <div id="links">
-        <a href="/scan">Automated market scanner &raquo;</a>
+        <span id="current">Trade finder</span>
+        <a href="/scan">Automated market scanner</a>
+        <a href="/orderwatch">Order watch</a>
         </div>
         <h1>Trade finder</h1>
         ''')
@@ -455,7 +471,9 @@ def scan():
     output += textwrap.dedent('''
         <body>
         <div id="links">
-        <a href="/">&laquo; Back to main screen</a>     
+        <a href="/">Trade finder</a>
+        <span id="current">Automated market scanner</span>
+        <a href="/orderwatch">Order watch</a>      
         </div>
         <h1>Automated market scanner</h1>
         <button id="scan" onclick="toggleMarketScan()">Start market scan</button>
@@ -466,6 +484,151 @@ def scan():
         </div>
         </body>
         </html>''')
+
+    return output
+
+# header javascript for order watch
+orderscript = '''
+<script src="http://code.jquery.com/jquery.min.js"></script>
+<script>
+    scan = %s
+    timers = []
+    millis = 3000
+
+    function refreshOrders() {
+        scanner = ""
+        if ($("#scancheck").attr("checked"))
+            scanner = "?scanner=1"
+        $("#ajaxorders").load("/getorders" + scanner);
+    }
+
+    function setScan(interval) {
+        n = scan.length
+        timers[0] = setInterval("refreshOrders(); toggleOrderScan()", (n*millis)+interval)
+        for (i = 1; i < n; i++) {
+            timers[i] = setTimeout("CCPEVE.showMarketDetails("+scan[i]+")", (i*millis)+interval)
+        }
+    }
+
+    function unsetScan() {
+        clearInterval(timers[0])
+        for (i = 1; i < timers.length-1; i++) {
+            clearTimeout(timers[i])
+        }    
+    }
+
+    function toggleOrderScan() {
+        if ($("#scancheck").attr("checked")) {
+            setScan((5*60*1000))
+        } else {
+            unsetScan()
+        }
+    }
+</script>
+'''
+
+orders = []
+
+@route('/orderwatch')
+def orderwatch():
+    '''Order watch page'''
+    global orders
+    charid = int(request.headers.get('Eve-CharID') or 0)
+    region = int(request.headers.get('Eve-RegionID') or 0)
+    marketorders = auth.char.MarketOrders(charID=charid)
+    orders = [order for order in marketorders.orders if order['orderState'] == 0]
+    scan = [order['typeID'] for order in orders if data.stations[order['stationID']] == region]
+
+    output = head % 'Order watch' + orderscript % str(scan) + headend
+    output += textwrap.dedent('''
+        <body>
+        <div id="links">
+        <a href="/">Trade finder</a>
+        <a href="/scan">Automated market scanner</a>
+        <span id="current">Order watch</span>
+        </div>
+        <h1>Order watch</h1>
+        <div id="ajaxorders">''')
+    output += getorders()
+    output += textwrap.dedent('''
+        </div>
+        </body>
+        </html>''')
+
+    return output
+
+@route('/getorders')
+def getorders():
+    '''Orders table'''
+    sell, buy = index_market(1)
+
+    outbid = []
+    for order in orders:
+        region = data.stations.get(order['stationID'], 0)
+        if order['bid']:
+            for hit in buy.get(order['typeID'], []):
+                if (region == hit.regionID and 
+                    order['stationID'] == hit.stationID and 
+                    order['price'] < hit.price):
+                    outbid.append(order['typeID'])
+        else: 
+            for hit in sell.get(order['typeID'], []):
+                if (region == hit.regionID and 
+                    order['stationID'] == hit.stationID and 
+                    order['price'] > hit.price):
+                    outbid.append(order['typeID'])
+    outbid = list(set(outbid))
+
+    output = textwrap.dedent('''
+        <table>
+        <tr>
+        <th>Item</th>
+        <th>Region</th>
+        <th class="ralign">Price</th>
+        <th class="ralign">Remaining</th>
+        <th class="ralign">Entered</th>
+        </tr>''')
+
+    smd = 'javascript:CCPEVE.showMarketDetails'
+    region = int(request.headers.get('Eve-RegionID') or 0)
+
+    for order in sorted(orders, key=lambda x: x['price'], reverse=True):
+        mark = ' class="A"'
+        warning = '<h2 class="X">Your order on <a class="J" href="%s(%i)">%s</a> has been outbid</h2>\n'
+        if order['bid']:
+            if order['typeID'] in outbid:
+                output += warning % (smd, order['typeID'], cfg.invtypes.Get(order['typeID']).name)
+                mark = ' class="X"'
+        else:
+            if order['typeID'] in outbid:
+                output += warning % (smd, order['typeID'], cfg.invtypes.Get(order['typeID']).name)
+                mark = ' class="X"'
+        orderregion = data.stations.get(order['stationID'], 0)
+        if orderregion != region:
+            mark = ''
+        
+        output += textwrap.dedent('''
+            <tr>
+            <td><a%s href="%s(%i)">%s</a></td>
+            <td>%s</td>
+            <td class="ralign">%s</td>
+            <td class="ralign">%i</td>
+            <td class="ralign">%i</td>
+            </tr>''' % (mark, smd,
+                        order['typeID'],
+                        cfg.invtypes.Get(order['typeID']).name,
+                        cfg.evelocations.Get(orderregion).name,
+                        isk_string(order['price']),
+                        order['volRemaining'], 
+                        order['volEntered']))
+
+    scanner = int(request.query.scanner or 0)
+    scanactive = ' checked="yes"' if scanner else ''
+    output += textwrap.dedent('''
+        </table>
+        <button onclick="setScan(0)">Scan and refresh</button><br>
+        <input type="checkbox" id="scancheck" onclick="toggleOrderScan()"%s>every 5 minutes
+        ''' % scanactive)
 
     return output
 
