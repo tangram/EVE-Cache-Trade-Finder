@@ -6,7 +6,7 @@ Licenced under the MIT License, see http://www.opensource.org/licenses/MIT
 
 I played a bit of EVE Online and got into trading. I found the [EVE-Central](http://eve-central.com/) Trade Finder to be a bit unreliable, and [NavBot](http://code.google.com/p/navbot/) to be slow and exporting market logs tedious.
 
-This script will scan your EVE cache using [Reverence](https://github.com/ntt/reverence), find potential trades, and output a web page with the results to `http://localhost` using [Bottle](https://github.com/defnull/bottle), which can then be opened in the in-game browser. It uses [Eveapi](https://github.com/ntt/eveapi) to fetch your orders for the order watch screen.
+This script will scan your EVE cache using [Reverence](https://github.com/ntt/reverence), find potential trades, and output a web page with the results to `http://localhost` using [Bottle](https://github.com/defnull/bottle), which can then be opened in the in-game browser. It uses [Eveapi](https://github.com/ntt/eveapi) to fetch your orders for the Order Watch screen.
 
 ISK Donations to `Stella Singularity` accepted.
 
@@ -17,10 +17,10 @@ ISK Donations to `Stella Singularity` accepted.
 4. Start the script with `python tradefinder.py`
 5. Visit `http://localhost` from the in-game browser. Accepting localhost as trusted will give you better links and ability to calculate jumps. Filled orders will be removed as the page and cache is updated.
 6. You can use the Automated Market Scanner to have the script browse the market for you. The market screen will take focus every three seconds, so do it while docked or travelling safely. The delay is required to make sure EVE does not deny the JavaScript calls, so the scan can take some time.
-7. The order watch screen allows you to scan your orders for the current region, either on command or every 5 minutes, and warns you if any of them are outbid (at the same station).
+7. The Order Watch screen allows you to scan your orders for the current region, either on command or every 5 minutes, and warns you if any of them are outbid (at the same station).
 
 ## Changelog: ##
-* v0.8 - Added order watch screen, market scanner group selection
+* v0.8 - Added Order Watch screen, market scanner group selection
 * v0.7 - Added system security indicators, market scanner fixes
 * v0.6 - Added calculation of jump lengths, sort by profit per jump
 * v0.5 - Added Automated Market Scanner
