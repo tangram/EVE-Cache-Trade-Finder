@@ -572,6 +572,7 @@ def getorders():
             for hit in buy.get(order.typeID, []):
                 if order.orderID == hit.orderID:
                     order.price = hit.price
+                    order.volRemaining = hit.volRemaining
                 elif (region == hit.regionID and 
                     order.stationID == hit.stationID and 
                     order.price < hit.price):
@@ -580,6 +581,7 @@ def getorders():
             for hit in sell.get(order.typeID, []):
                 if order.orderID == hit.orderID:
                     order.price = hit.price
+                    order.volRemaining = hit.volRemaining
                 elif (region == hit.regionID and 
                     order.stationID == hit.stationID and 
                     order.price > hit.price):
