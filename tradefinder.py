@@ -20,7 +20,7 @@ cfg = eve.getconfigmgr()
 cachemgr = eve.getcachemgr()
 
 API_KEYID = 123456
-API_VCODE = "alphanumericverificationcodegoeshere"
+API_VCODE = "longalphanumericapiverificationcodegoeshere"
 
 api = eveapi.EVEAPIConnection()
 auth = api.auth(keyID=API_KEYID, vCode=API_VCODE)
@@ -74,13 +74,13 @@ def path_length(path):
         return len(path) - 1
     return 0
 
-def index_market(timelimit = timelimit):
+def index_market(timelimit=timelimit):
     '''Index sell and buy data'''
     cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
     sell = {}
     buy = {}
     for key, obj in cmc.iteritems():
-        if key[1] == 'GetOrders' and real_age(obj['used']) < timelimit:
+        if key[1] == 'GetOrders' and real_age(obj['version'][0]) < timelimit:
             # 0 = sell orders, 1 = buy orders
             for row in obj['lret'][0]:
                 if row.typeID in sell:
@@ -345,11 +345,11 @@ def index():
 # build typeid dictionary from cache data
 typeids = {}
 for invtype in cfg.invtypes:
-    if invtype['marketGroupID'] in data.hastypes:
-        if invtype['marketGroupID'] in typeids:
-            typeids[invtype['marketGroupID']].append(invtype['typeID'])
+    if invtype.marketGroupID in data.hastypes:
+        if invtype.marketGroupID in typeids:
+            typeids[invtype.marketGroupID].append(invtype.typeID)
         else:
-            typeids[invtype['marketGroupID']] = [invtype['typeID']]
+            typeids[invtype.marketGroupID] = [invtype.typeID]
 
 # header javascript for market scanner
 scannerscript = '''
@@ -385,7 +385,7 @@ scannerscript = '''
             timers[0] = setInterval("loopDots()", millis/4)
             n = selected.length
             for (i = 0; i < n; i++) {
-                timers[i+1] = setTimeout("nextItem("+i+", "+selected[i]+")", i*millis)
+                timers[i+1] = setTimeout("nextItem("+i+", "+selected[i]+")", (i*millis)+10)
             }
             timers[n] = setTimeout("toggleMarketScan()", ((n-1)*millis)+10)
         } else {
@@ -473,7 +473,7 @@ def scan():
         <div id="links">
         <a href="/">Trade finder</a>
         <span id="current">Automated market scanner</span>
-        <a href="/orderwatch">Order watch</a>      
+        <a href="/orderwatch">Order watch</a>    
         </div>
         <h1>Automated market scanner</h1>
         <button id="scan" onclick="toggleMarketScan()">Start market scan</button>
@@ -503,10 +503,11 @@ orderscript = '''
     }
 
     function setScan(interval) {
+        unsetScan()
         n = scan.length
         timers[0] = setInterval("refreshOrders(); toggleOrderScan()", (n*millis)+interval)
-        for (i = 1; i < n; i++) {
-            timers[i] = setTimeout("CCPEVE.showMarketDetails("+scan[i]+")", (i*millis)+interval)
+        for (i = 0; i < n; i++) {
+            timers[i+1] = setTimeout("CCPEVE.showMarketDetails("+scan[i]+")", (i*millis)+interval)
         }
     }
 
@@ -536,8 +537,8 @@ def orderwatch():
     charid = int(request.headers.get('Eve-CharID') or 0)
     region = int(request.headers.get('Eve-RegionID') or 0)
     marketorders = auth.char.MarketOrders(charID=charid)
-    orders = [order for order in marketorders.orders if order['orderState'] == 0]
-    scan = [order['typeID'] for order in orders if data.stations[order['stationID']] == region]
+    orders = [order for order in marketorders.orders if order.orderState == 0]
+    scan = [order.typeID for order in orders if data.stations[order.stationID] == region]
 
     output = head % 'Order watch' + orderscript % str(scan) + headend
     output += textwrap.dedent('''
@@ -548,7 +549,9 @@ def orderwatch():
         <span id="current">Order watch</span>
         </div>
         <h1>Order watch</h1>
-        <div id="ajaxorders">''')
+        <div id="ajaxorders">
+        On first load, orders may be based on old data. Click <em>Scan and refresh</em> below.
+        ''')
     output += getorders()
     output += textwrap.dedent('''
         </div>
@@ -560,23 +563,27 @@ def orderwatch():
 @route('/getorders')
 def getorders():
     '''Orders table'''
-    sell, buy = index_market(1)
+    sell, buy = index_market(24)
 
     outbid = []
     for order in orders:
-        region = data.stations.get(order['stationID'], 0)
-        if order['bid']:
-            for hit in buy.get(order['typeID'], []):
-                if (region == hit.regionID and 
-                    order['stationID'] == hit.stationID and 
-                    order['price'] < hit.price):
-                    outbid.append(order['typeID'])
+        region = data.stations.get(order.stationID, 0)
+        if order.bid:
+            for hit in buy.get(order.typeID, []):
+                if order.orderID == hit.orderID:
+                    order.price = hit.price
+                elif (region == hit.regionID and 
+                    order.stationID == hit.stationID and 
+                    order.price < hit.price):
+                    outbid.append(order.typeID)
         else: 
-            for hit in sell.get(order['typeID'], []):
-                if (region == hit.regionID and 
-                    order['stationID'] == hit.stationID and 
-                    order['price'] > hit.price):
-                    outbid.append(order['typeID'])
+            for hit in sell.get(order.typeID, []):
+                if order.orderID == hit.orderID:
+                    order.price = hit.price
+                elif (region == hit.regionID and 
+                    order.stationID == hit.stationID and 
+                    order.price > hit.price):
+                    outbid.append(order.typeID)
     outbid = list(set(outbid))
 
     output = textwrap.dedent('''
@@ -592,18 +599,14 @@ def getorders():
     smd = 'javascript:CCPEVE.showMarketDetails'
     region = int(request.headers.get('Eve-RegionID') or 0)
 
-    for order in sorted(orders, key=lambda x: x['price'], reverse=True):
+    for order in sorted(orders, key=lambda x: x.price, reverse=True):
         mark = ' class="A"'
         warning = '<h2 class="X">Your order on <a class="J" href="%s(%i)">%s</a> has been outbid</h2>\n'
-        if order['bid']:
-            if order['typeID'] in outbid:
-                output += warning % (smd, order['typeID'], cfg.invtypes.Get(order['typeID']).name)
-                mark = ' class="X"'
-        else:
-            if order['typeID'] in outbid:
-                output += warning % (smd, order['typeID'], cfg.invtypes.Get(order['typeID']).name)
-                mark = ' class="X"'
-        orderregion = data.stations.get(order['stationID'], 0)
+        if order.typeID in outbid:
+            name = cfg.invtypes.Get(order.typeID).name
+            output += warning % (smd, order.typeID, name)
+            mark = ' class="X"'
+        orderregion = data.stations.get(order.stationID, 0)
         if orderregion != region:
             mark = ''
         
@@ -615,18 +618,18 @@ def getorders():
             <td class="ralign">%i</td>
             <td class="ralign">%i</td>
             </tr>''' % (mark, smd,
-                        order['typeID'],
-                        cfg.invtypes.Get(order['typeID']).name,
+                        order.typeID,
+                        cfg.invtypes.Get(order.typeID).name,
                         cfg.evelocations.Get(orderregion).name,
-                        isk_string(order['price']),
-                        order['volRemaining'], 
-                        order['volEntered']))
+                        isk_string(order.price),
+                        order.volRemaining, 
+                        order.volEntered))
 
     scanner = int(request.query.scanner or 0)
     scanactive = ' checked="yes"' if scanner else ''
     output += textwrap.dedent('''
         </table>
-        <button onclick="setScan(0)">Scan and refresh</button><br>
+        <button onclick="setScan(10)">Scan and refresh</button><br>
         <input type="checkbox" id="scancheck" onclick="toggleOrderScan()"%s>every 5 minutes
         ''' % scanactive)
 
