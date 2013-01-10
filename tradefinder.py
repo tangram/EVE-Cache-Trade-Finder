@@ -76,7 +76,7 @@ def path_length(path):
 
 def index_market(timelimit=timelimit):
     '''Index sell and buy data'''
-    cmc = cachemgr.LoadCacheFolder('CachedMethodCalls')
+    cmc = cachemgr.LoadCacheFolder(cachemgr.machocachepath + '\CachedMethodCalls')
     sell = {}
     buy = {}
     for key, obj in cmc.iteritems():
