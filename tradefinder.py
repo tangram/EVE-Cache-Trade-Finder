@@ -13,24 +13,30 @@ import textwrap
 import data
 import eveapi
 
-EVEROOT = 'C:\Program Files (x86)\CCP\EVE'
+#loading configuration from config.ini
+cfg_parser = SafeConfigParser()
+cfg_parser.read('config.ini')
+
+#EVE Online root filder
+EVEROOT = cfg_parser.get('EVE', 'root')
 
 eve = blue.EVE(EVEROOT)
 cfg = eve.getconfigmgr()
 cachemgr = eve.getcachemgr()
 
-API_KEYID = 123456
-API_VCODE = "longalphanumericapiverificationcodegoeshere"
+#API Key & Verification Code
+API_KEYID = cfg_parser.get('API', 'key')
+API_VCODE = cfg_parser.get('API', 'vcode')
 
 api = eveapi.EVEAPIConnection()
 auth = api.auth(keyID=API_KEYID, vCode=API_VCODE)
 
 # initial configuration
-profitlimit = 1000000 # ISK
-timelimit = 24        # hours
-cargolimit = 1000     # m3
-accounting = 0        # accounting skill level
-sortby = 0            # selected sort option, see list below
+profitlimit = cfg_parser.getint('DEFAULTS', 'profitlimit')
+timelimit = cfg_parser.getint('DEFAULTS', 'timelimit')
+cargolimit = cfg_parser.getint('DEFAULTS', 'cargolimit')
+accounting = cfg_parser.getint('DEFAULTS', 'accounting')
+sortby = cfg_parser.getint('DEFAULTS', 'sortby')
 
 SORTSTRINGS = ['Trip profit', 'Total profit', 'Jump profit']
 RESULTLIMIT = 100     # limit for total number of results
